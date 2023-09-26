@@ -73,16 +73,15 @@ function bresenhams_line(point_0, point_1, color) {
     var y0 = point_0[1];
     var x1 = point_1[0];
     var y1 = point_1[1];
-
     var dx = Math.abs(x1 - x0);
     var dy = Math.abs(y1 - y0);
     var sx = x0 < x1 ? 1 : -1;
     var sy = y0 < y1 ? 1 : -1;
     var error = dx - dy;
+    var error_2 = error*2;
     put_pixel(x1, y1, color);
     while (x0 != x1 && y0 != y1) {
         put_pixel(x0, y0, color);
-        var error_2 = error * 2;
         if (error_2 > -dy) {
             error -= dy;
             x0 += sx;
@@ -93,3 +92,44 @@ function bresenhams_line(point_0, point_1, color) {
         }
     }
 }
+
+/**
+ * Rasterizes a circle by the values of its center coordinates, diameter, and color value in RGBA format.
+ * 
+ * O(1)
+ * @param {Number[]} point_0 coordinates of the circle center [x0, y0]
+ * @param {Number} diametr size of the circle
+ * @param {Number[]} color color of the circle in RGBA format 
+ */
+var bresenhams_circle = function(point_0, diametr, color) {
+    var x0 = point_0[0];
+    var y0 = point_0[1];
+    var x = 0;
+    var y = diametr / 2;
+    var delta = 1 - diametr;
+    var error = 0;
+    while (y >= 0) {
+        put_pixel(x0 + x, y0 + y, color);
+        put_pixel(x0 + x, y0 - y, color);
+        put_pixel(x0 - x, y0 + y, color);
+        put_pixel(x0 - x, y0 - y, color);
+        error = 2*(delta + y) - 1;
+        if (delta < 0 && error <= 0) {
+            ++x;
+            delta += 2*x + 1;
+            continue;  
+        }
+        else if (delta > 0 && error > 0) {
+            --y;
+            delta -= 2*y + 1;
+            continue;
+        }
+        x++;
+        y--;
+        delta += 2*(x - y);
+    }
+}
+
+update_canvas();
+
+
