@@ -1,13 +1,21 @@
 const canvas = document.getElementById('canvas');
+const context = canvas.getContext('2d');
 canvas.width = 400;
 canvas.height = 400;
-const context = canvas.getContext('2d');
-const buffer = context.getImageData(0, 0, canvas.width, canvas.height);
+var buffer = context.getImageData(0, 0, canvas.width, canvas.height);
 const step = buffer.width * 4;
-const epsilon = 0.000001;
+const epsilon = 10e-10;
 const DPI = 150/30;
+// window.innerWidth > window.innerHeight ? canvas.width = window.innerHeight : canvas.width = window.innerWidth;
+// window.innerWidth > window.innerHeight ? canvas.height = window.innerHeight : canvas.height = window.innerWidth;
+// window.innerWidth > window.innerHeight ? DPI = window.innerHeight/30 : DPI = window.innerWidth/30;
+
 var bindings = [];
 var anchors = [];
+
+// window.addEventListener('resize', function() {
+//     location.reload();
+// });
 
 /**
  * Inserts a pixel of the desired color at the x, y coordinates.
@@ -31,6 +39,68 @@ function put_pixel(x, y, color) {
     buffer.data[offset++] = color[1];
     buffer.data[offset++] = color[2];
     buffer.data[offset++] = color[3] || 255;
+}
+
+/**
+ * Returns the color value at the point with x, y coordinates in RGBA format.
+ * 
+ * O(1)
+ * @param {Number} x - coordinates of the x
+ * @param {Number} y - coordinates of the y
+ * @returns {Array} color in format [RGBA]
+ */
+function get_pixel_color(x, y) {
+    var xr = Math.floor(canvas.width / 2 + x);
+    var yr = Math.floor(canvas.height / 2 - y - 1);
+    var offset = 4 * xr + step * yr;
+    var original_data = buffer.data.slice(offset, offset + 4).map(value => Math.round(value));
+    
+    return [
+        original_data[0],
+        original_data[1],
+        original_data[2],
+        original_data[3]
+    ];
+}
+
+/**
+ * Returns a saturation value in the range 0-1.
+ * 
+ * O(1)
+ * @param {Number} x - coordinates of the x
+ * @param {Number} y - coordinates of the y
+ * @returns {Number} saturation value
+ */
+function get_saturation(x, y) {
+    var xr = Math.floor(canvas.width / 2 + x);
+    var yr = Math.floor(canvas.height / 2 - y - 1);
+    var offset = 4 * xr + step * yr;
+    var original_data = buffer.data.slice(offset, offset + 4).map(value => Math.round(value));
+    var r = original_data[0];
+    var g = original_data[1];
+    var b = original_data[2];
+    return Number(((r+g+b)/765).toFixed(2));
+}
+
+/**
+ * O(n^2)
+ * @param {Number[]} array - input array
+ * @returns {Number[]} output array
+ */
+function selection_sort(array) {
+    var sorted_array = [];
+    while (array.length > 0) {
+        var smallest = array[0];
+        var smallest_index = 0;
+        for (var i = 1; i < array.length; i++) {
+            if (array[i] < smallest) {
+                smallest = array[i];
+                smallest_index = i;
+            }
+        }
+        sorted_array.push(array.splice(smallest_index, 1)[0])
+    }
+    return sorted_array;
 }
 
 /**
@@ -58,7 +128,7 @@ function create_bindings(center, radius, n) {
     for (let i = 0; i < 360; i += offset) {
         var x = x0 + radius * Math.cos((i) * Math.PI / 180);
         var y = y0 + radius * Math.sin((i) * Math.PI / 180);
-        bindings.push([Math.floor(x*DPI), Math.floor(y*DPI)]);
+        bindings.push([Math.floor(x), Math.floor(y)]);
     }
 }
 
@@ -220,18 +290,17 @@ function grid(size_mm, line_width = 1, color = [0,0,0,255]) {
  * Draw the intersections across current point to the arc circle.
  * 
  * O(1)
- * @param {Number[]} point_0 - current point [x0, y0]
- * @param {Number[]} point_1 - current point [x1, y1]
+ * @param {!Number[]} point_0 - current point [x0, y0]
+ * @param {!Number[]} point_1 - current point [x1, y1]
  * @param {Number} radius - radius of the circle
  */
 function line_circle_intersection(point_0, point_1, radius) {
-    var x0 = point_0[0] == 0 ? x0 = epsilon: x0 = point_0[0];
-    var y0 = point_0[1] == 0 ? y0 = epsilon: y0 = point_0[1];
-    var x1 = point_1[0] == 0 ? x1 = epsilon: x1 = point_1[0];
-    var y1 = point_1[1] == 0 ? y1 = epsilon: y1 = point_1[1];
+    var x0 = point_0[0] == 0 ? epsilon : point_0[0];
+    var y0 = point_0[1] == 0 ? epsilon : point_0[1];
+    var x1 = point_1[0] == 0 ? epsilon : point_1[0];
+    var y1 = point_1[1] == 0 ? epsilon : point_1[1];
     var k0 = (y1 - y0)/(x1 - x0);
     var b0 = -k0*x0 + y0;
-
     var A = k0*x0;
     var B = -A / k0;
     var C = -B * b0;
@@ -244,11 +313,11 @@ function line_circle_intersection(point_0, point_1, radius) {
     var ay = Y0 - A * m;
     var bx = X0 - B * m;
     var by = Y0 + A * m;
-
-    line([ax*DPI,ay*DPI], [bx*DPI,by*DPI], [0,0,255,255]);
-    circle([X0*DPI, Y0*DPI], 2, [255,128,128,255], 4)
-    circle([ax*DPI,ay*DPI], 2, [255,128,128,255], 4);
-    circle([bx*DPI,by*DPI], 2, [255,128,128,255], 4);
+    anchors.push([ax,ay], [bx,by]);
+    line([ax,ay], [bx,by], [255,0,0,255]);
+    circle([ax,ay], 2, [255,128,128,255], 4);
+    circle([bx,by], 2, [255,128,128,255], 4);
+    
 }
 
 /**
@@ -257,21 +326,21 @@ function line_circle_intersection(point_0, point_1, radius) {
  * O(n)
  * @param {Number[]} point_0 - current point [x0, y0]
  * @param {Number[]} point_1 - current point [x1, y1]
+ * @param {Number} radius - radius of the circle
  * @param {Number} n - count of lines
  */
-function point_intersection(point_0, point_1, n) {
-    var x0 = point_0[0];
-    var y0 = point_0[1];
-    var x1 = point_1[0];
-    var y1 = point_1[1];
+function point_intersection(point_0, point_1, radius, n) {
+    var x0 = point_0[0] == 0 ? epsilon : point_0[0];
+    var y0 = point_0[1] == 0 ? epsilon : point_0[1];
+    var x1 = point_1[0] == 0 ? epsilon : point_1[0];
+    var y1 = point_1[1] == 0 ? epsilon : point_1[1];
     var k0 = (y1 - y0)/(x1 - x0);
     var b0 = -k0*x0 + y0;
-    var angle = 360 / n;
+    var angle = 360 / (2*n);
     var angle_tangent = Math.tan(angle*(Math.PI/180));
     var unchanged_x = x1;
     var unchanged_y = y1;
-    
-    if (n % 2 == 0) { n = n / 2;}
+    var directions = [];
 
     if (angle == 90) {
         var k1 = -1 / k0; 
@@ -279,26 +348,161 @@ function point_intersection(point_0, point_1, n) {
         var k1 = (angle_tangent + k0) / (1 - angle_tangent * k0);
     }
 
-    for (var i = 0; i <= n-1; i++) {
+    for (var i = 0; i <= n; i++) {
         var new_x = x1 + 10;
         var new_y = k1* (new_x - x1) + b0;
-        anchors.push([[unchanged_x, unchanged_y], [new_x, new_y]]);
+        directions.push([[unchanged_x, unchanged_y], [new_x, new_y]]);
         x1 = x1;
         y1 = new_y;
         k1 = (angle_tangent + k1) / (1 - angle_tangent * k1);
     }
+
+    for (var i = 0; i <= directions.length - 1; i++) {
+        x0 = directions[i][0][0];
+        y0 = directions[i][0][1];
+        x1 = directions[i][1][0];
+        y1 = directions[i][1][1];
+        line_circle_intersection([x0,y0], [x1, y1], radius)
+    }
 }
 
-grid(5, 1, [0,0,0,255*0.1]);
-circle([0,0], 150, [0,0,0,255],2)
-point_intersection([-10,0], [0, 15], 8);
-create_bindings([0,0], 30, 16);
-draw_bindings(bindings, [0,0,0,255]);
+/**
+ * Calculates the angle in degrees from the coordinates of point_0 with respect to the centre of the circle at point [0,0].
+ * 
+ * O(1)
+ * @param {Number[]} point_0 - current point [x0, y0]
+ * @returns {Number} value of the angle in degrees
+ */
+function get_angle(point_0) {
+    var x0 = point_0[0] == 0 ? epsilon : point_0[0];
+    var y0 = point_0[1] == 0 ? epsilon : point_0[1];
 
-for (var i = 0; i <= anchors.length - 1; i++) {
-    x0 = anchors[i][0][0];
-    y0 = anchors[i][0][1];
-    x1 = anchors[i][1][0];
-    y1 = anchors[i][1][1];
-    line_circle_intersection([x0,y0], [x1, y1], 30)
+    if (x0 > 0 && y0 > 0) {
+        return Math.atan(Math.abs(y0/x0))*180/Math.PI;
+    }
+    if (x0 < 0 && y0 > 0) {
+        return 180 - Math.atan(Math.abs(y0/x0))*180/Math.PI;
+    }
+    if (x0 < 0 && y0 < 0) {
+        return 180 + Math.atan(Math.abs(y0/x0))*180/Math.PI;
+    }
+    if (x0 > 0 && y0 < 0) {
+        return 360 - Math.atan(Math.abs(y0/x0))*180/Math.PI;
+    }
+
+    // return (Math.atan2(y0, x0) * 180 / Math.PI + 360) % 360;
 }
+
+/**
+ * Returns the coordinates of the point by its angle in degrees and radius.
+ * 
+ * O(1)
+ * @param {Number} angle - angle in degrees.
+ * @param {Number} radius - radius of the circle
+ * @returns {Number[]} coordinates of the point [x,y]
+ */
+function get_point(angle, radius) {
+    var x = radius * Math.cos((angle * Math.PI) / 180);
+    var y = radius * Math.sin((angle * Math.PI) / 180);
+    return [x,y];
+}
+
+/**
+ * Compares the degree measures of the angles of two arrays and rebindings the theoretical points to the nearest actual points.
+ * 
+ * O(n²)
+ * @param {Number[]} bindings_set - actual binding coordinates
+ * @param {Number[]} anchors_set - theoretical reference coordinates
+ * @param {Number} radius - radius of the circle
+ * @param {Number} n - count of bindings
+ * @returns {Number[]} array with coordinates of reassigned points
+ */
+function compare_bindings(bindings_set, anchors_set, radius) {
+    var binding_angles = [];
+    var anchor_angles = [];
+    var rebindings = [];
+    var coordinates = [];
+    var angle_correction = 360 / (2*bindings_set.length);
+
+    for (var i = 1; i < bindings_set.length; i++) {
+        var x = bindings_set[i][0] == 0 ? epsilon : bindings_set[i][0];
+        var y = bindings_set[i][1] == 0 ? epsilon : bindings_set[i][1];
+        binding_angles.push(get_angle([x, y]));
+    }
+
+    binding_angles.push(360);
+    anchors_set.splice(-2);
+
+    for (var i = 0; i < anchors_set.length; i++) {
+        var x = anchors_set[i][0] == 0 ? x = epsilon : x = anchors_set[i][0];
+        var y = anchors_set[i][1] == 0 ? y = epsilon : y = anchors_set[i][1];
+        anchor_angles.push(get_angle([x, y]));
+    }
+    
+    anchor_angles = selection_sort(anchor_angles);
+
+    for (var i = 0; i < anchor_angles.length; i++) {
+        for (var j = 0; j < binding_angles.length; j++) {
+            if (Math.abs(binding_angles[j] - anchor_angles[i]) < angle_correction) {
+                if (anchor_angles[i] !== anchor_angles[i-1]) {
+                    rebindings.push(binding_angles[j]);
+                }   
+            }
+        }
+    }
+
+    for (var i = 0; i < rebindings.length; i++) {
+        coordinates.push(get_point(rebindings[i], radius));
+    }
+    
+    return coordinates;
+}
+
+function intersection(coordinates, n) {
+
+    for (i = 0; i < coordinates.length; i++) {
+        var x0 = coordinates[i][0];
+        var y0 = coordinates[i][1];
+        var index = (i + n) % coordinates.length;
+        var x1 = coordinates[index][0];
+        var y1 = coordinates[index][1];
+        line([x0, y0], [x1, y1], [0,0,255,255])
+    }
+}
+
+function load_image(src) {
+    return new Promise((resolve, reject) => {
+        var img = new Image();
+        img.onload = function() {
+            resolve(img);
+        };
+        img.onerror = function() {
+            reject(new Error('Failed to load the image'));
+        };
+        img.src = src;
+    });
+}
+
+function image_in_circle(context, image, x, y, radius) {
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.beginPath();
+    context.arc(x, y, radius, 0, 2 * Math.PI); 
+    context.clip();
+    context.drawImage(image, x - radius, y - radius, 2 * radius, 2 * radius);
+}
+
+load_image('./images/test_image_bw.png').then((img) => {
+    context.drawImage(img, 0, 0, canvas.width, canvas.height);
+    image_in_circle(context, img, canvas.width / 2, canvas.height / 2, 160);
+
+    var N = 150;
+    circle([0,0], 150, [0,0,0,255], 2);
+    create_bindings([0,0], 150, N);
+    draw_bindings(bindings, [0,255,0,255])
+    point_intersection([-10*DPI,0*DPI], [0*DPI, 15*DPI], 150, 4);
+    intersection(compare_bindings(bindings, anchors, 150), 4)
+    circle([60, 20], 2, [0,255,0,255], 4)
+    buffer = context.getImageData(0, 0, canvas.width, canvas.height);
+    console.log(get_pixel_color(60, 20))
+    console.log(get_saturation(60, 20))
+});
